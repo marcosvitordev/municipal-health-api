@@ -5,7 +5,7 @@ const { logAction } = require('./auditService');
 
 const SALT_ROUNDS = parseInt(process.env.SALT_ROUNDS || '12', 10);
 
-async function register({ name, email, password, role, municipality_id=null, institute_id=null }, ip, ua) {
+async function register({ name, email, password, role, municipality_id = null, institute_id = null }, ip, ua) {
   const [[exists]] = await pool.query(`SELECT id FROM users WHERE email = ?`, [email]);
   if (exists) throw Object.assign(new Error('Email já cadastrado'), { status: 400 });
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
