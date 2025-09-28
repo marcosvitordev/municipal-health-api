@@ -13,7 +13,7 @@ async function uploadBuffer(key, buffer, contentType) {
   await s3.send(new PutObjectCommand({ Bucket: process.env.SPACES_BUCKET, Key: key, Body: buffer, ContentType: contentType, ACL: 'private' }));
   return key;
 }
-async function presignGet(key, expires=300) {
+async function presignGet(key, expires = 300) {
   const cmd = new GetObjectCommand({ Bucket: process.env.SPACES_BUCKET, Key: key });
   return await getSignedUrl(s3, cmd, { expiresIn: expires });
 }
