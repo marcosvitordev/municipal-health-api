@@ -1,3 +1,4 @@
+// src/controllers/requestController.js
 const reqSvc = require('../services/requestService');
 
 async function create(req,res,n){try{res.status(201).json(await reqSvc.createRequest(req.body, req.user));}catch(e){n(e)}}
@@ -7,7 +8,7 @@ async function assign(req,res,n){try{await reqSvc.assignProfessional(req.params.
 async function schedule(req,res,n){try{await reqSvc.schedule(req.params.id, req.body.scheduled_date, req.user); res.json({ok:true});}catch(e){n(e)}}
 async function status(req,res,n){try{await reqSvc.updateStatus(req.params.id, req.body.status, req.body.reason, req.user); res.json({ok:true});}catch(e){n(e)}}
 async function getDocuments(req,res,n){try{res.json(await reqSvc.getDocumentsByRequestId(req.params.id));}catch(e){n(e)}}
-// NOVO CONTROLADOR
+
 async function submitReturn(req, res, n) {
     try {
         await reqSvc.submitReturn(req.params.id, req.body, req.user);
@@ -16,4 +17,5 @@ async function submitReturn(req, res, n) {
         n(e);
     }
 }
+
 module.exports = { create, list, get, assign, schedule, status, getDocuments, submitReturn };

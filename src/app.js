@@ -72,7 +72,8 @@ app.use(helmet());
 // ==========================
 const allowedOrigins = [
   "http://localhost:3000", // Frontend Next.js
-  "http://localhost:3001", // Caso rode em outra porta
+  "http://localhost:3001",
+  "https://www.institutocuidarmais.com", // Caso rode em outra porta
   process.env.CORS_ORIGIN // Domínio de produção (definido no .env)
 ].filter(Boolean); // remove valores undefined
 
