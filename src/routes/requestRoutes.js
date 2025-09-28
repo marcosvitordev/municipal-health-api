@@ -14,5 +14,6 @@ r.post('/:id/assign', a, role(['admin','institute']), ctl.assign);
 r.post('/:id/schedule', a, role(['admin','institute']), ctl.schedule);
 // mudança de status (profissional pode in_progress/completed)
 r.post('/:id/status', a, role(['admin','municipality','institute','professional']), ctl.status);
-
+// NOVA ROTA PARA ENVIAR RETORNO
+r.post('/:id/return', a, role(['admin', 'institute']), ctl.submitReturn);
 module.exports = r;

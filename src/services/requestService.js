@@ -243,9 +243,40 @@ async function updateStatus(requestId, status, reason, user) {
   await logAction({ userId: user?.id, action: 'STATUS', tableName: 'requests', recordId: requestId, oldValues: old, newValues: { status, reason } });
   return true;
 }
+
+// ===================================================================
+// === NOVA FUNÇÃO PARA ENVIAR O RETORNO COMPLETO ===
+// ===================================================================
+async function submitReturn(requestId, data, user) {
+  const { status, notes } = data;
+  if (!status || !notes) {
+    throw Object.assign(new Error('Status e notas são obrigatórios.'), { status: 400 });
+  }
+
+  const old = await get(requestId);
+  if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+
+  // Atualiza o status, as notas e a data de conclusão
+  const [result] = await pool.query(
+    `UPDATE requests SET status = ?, notes = ?, completed_date = NOW() WHERE id = ?`,
+    [status, notes, requestId]
+  );
+
+  await logAction({
+    userId: user?.id,
+    action: 'SUBMIT_RETURN',
+    tableName: 'requests',
+    recordId: requestId,
+    oldValues: { status: old.status, notes: old.notes },
+    newValues: { status, notes },
+  });
+
+  return !!result.affectedRows;
+}
+
 async function getDocumentsByRequestId(requestId) {
   const [rows] = await pool.query(`SELECT * FROM documents WHERE request_id = ?`, [requestId]);
   return rows;
 }
 
-module.exports = { createRequest, list, get, assignProfessional, schedule, updateStatus,getDocumentsByRequestId };
+module.exports = { createRequest, list, get, assignProfessional, schedule, updateStatus, getDocumentsByRequestId, submitReturn };

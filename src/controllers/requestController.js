@@ -7,5 +7,13 @@ async function assign(req,res,n){try{await reqSvc.assignProfessional(req.params.
 async function schedule(req,res,n){try{await reqSvc.schedule(req.params.id, req.body.scheduled_date, req.user); res.json({ok:true});}catch(e){n(e)}}
 async function status(req,res,n){try{await reqSvc.updateStatus(req.params.id, req.body.status, req.body.reason, req.user); res.json({ok:true});}catch(e){n(e)}}
 async function getDocuments(req,res,n){try{res.json(await reqSvc.getDocumentsByRequestId(req.params.id));}catch(e){n(e)}}
-
-module.exports = { create, list, get, assign, schedule, status, getDocuments };
+// NOVO CONTROLADOR
+async function submitReturn(req, res, n) {
+    try {
+        await reqSvc.submitReturn(req.params.id, req.body, req.user);
+        res.json({ ok: true });
+    } catch (e) {
+        n(e);
+    }
+}
+module.exports = { create, list, get, assign, schedule, status, getDocuments, submitReturn };
