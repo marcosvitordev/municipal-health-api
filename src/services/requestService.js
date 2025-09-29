@@ -306,11 +306,48 @@ async function createRequest(data, user) {
   return { id: res.insertId, request_number };
 }
 
+// async function list(filter, user) {
+//   const where = [], params = [];
+//   if (user.role === 'municipality' && user.municipality_id) { where.push('r.municipality_id=?'); params.push(user.municipality_id); }
+//   if (user.role === 'institute' && user.institute_id) { where.push('r.institute_id=?'); params.push(user.institute_id); }
+//   if (user.role === 'professional') { where.push('r.professional_id=?'); params.push(user.id); }
+//   if (filter.status) { where.push('r.status=?'); params.push(filter.status); }
+//   if (filter.request_number) { where.push('r.request_number=?'); params.push(filter.request_number); }
+
+//   const sql = `
+//     SELECT 
+//       r.*,
+//       p.name as patientName,
+//       p.document as patientDocument,
+//       p.phone as patientPhone,
+//       prof.name as professionalName,
+//       i.name as instituteName
+//     FROM requests r
+//     LEFT JOIN patients p ON r.patient_id = p.id
+//     LEFT JOIN professionals prof ON r.professional_id = prof.id
+//     LEFT JOIN institutes i ON r.institute_id = i.id
+//     ${where.length ? 'WHERE ' + where.join(' AND ') : ''} 
+//     ORDER BY r.created_at DESC LIMIT 200
+//   `;
+
+//   const [rows] = await pool.query(sql, params);
+//   return rows;
+// }
 async function list(filter, user) {
   const where = [], params = [];
   if (user.role === 'municipality' && user.municipality_id) { where.push('r.municipality_id=?'); params.push(user.municipality_id); }
   if (user.role === 'institute' && user.institute_id) { where.push('r.institute_id=?'); params.push(user.institute_id); }
-  if (user.role === 'professional') { where.push('r.professional_id=?'); params.push(user.id); }
+
+  // ==================== INÍCIO DA CORREÇÃO ====================
+  // Modificamos a forma como o profissional é filtrado.
+  // Em vez de usar user.id, buscamos o professional.id vinculado ao user.id.
+  if (user.role === 'professional') {
+    // Esta subconsulta encontra o ID do profissional com base no ID do usuário logado.
+    where.push('r.professional_id = (SELECT id FROM professionals WHERE user_id = ?)');
+    params.push(user.id);
+  }
+  // ===================== FIM DA CORREÇÃO ======================
+
   if (filter.status) { where.push('r.status=?'); params.push(filter.status); }
   if (filter.request_number) { where.push('r.request_number=?'); params.push(filter.request_number); }
 
@@ -333,7 +370,6 @@ async function list(filter, user) {
   const [rows] = await pool.query(sql, params);
   return rows;
 }
-
 async function get(id) {
   const [[request]] = await pool.query(
     `SELECT 
@@ -368,35 +404,35 @@ async function get(id) {
 }
 
 async function assignProfessional(requestId, professionalId, user) {
-    const old = await get(requestId);
-    if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+  const old = await get(requestId);
+  if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
 
-    // Permite que admin ou o instituto correto façam a atribuição
-    if (user.role === 'institute' && old.institute_id !== user.institute_id) {
-        throw Object.assign(new Error('Sem permissão para atribuir a esta solicitação'), { status: 403 });
-    }
+  // Permite que admin ou o instituto correto façam a atribuição
+  if (user.role === 'institute' && old.institute_id !== user.institute_id) {
+    throw Object.assign(new Error('Sem permissão para atribuir a esta solicitação'), { status: 403 });
+  }
 
-    const [result] = await pool.query(
-        `UPDATE requests SET professional_id = ?, status = 'assigned' WHERE id = ?`,
-        [professionalId, requestId]
-    );
+  const [result] = await pool.query(
+    `UPDATE requests SET professional_id = ?, status = 'assigned' WHERE id = ?`,
+    [professionalId, requestId]
+  );
 
-    await logAction({
-        userId: user?.id,
-        action: 'ASSIGN_PROFESSIONAL',
-        tableName: 'requests',
-        recordId: requestId,
-        oldValues: { professional_id: old.professional_id, status: old.status },
-        newValues: { professional_id: professionalId, status: 'assigned' },
-    });
+  await logAction({
+    userId: user?.id,
+    action: 'ASSIGN_PROFESSIONAL',
+    tableName: 'requests',
+    recordId: requestId,
+    oldValues: { professional_id: old.professional_id, status: old.status },
+    newValues: { professional_id: professionalId, status: 'assigned' },
+  });
 
-    // Opcional: Notificar o profissional
-    const [[profUser]] = await pool.query(`SELECT user_id FROM professionals WHERE id = ?`, [professionalId]);
-    if (profUser && profUser.user_id) {
-        await notify({ user_id: profUser.user_id, title: 'Nova atribuição', message: `Você foi atribuído à solicitação ${old.request_number}.` });
-    }
+  // Opcional: Notificar o profissional
+  const [[profUser]] = await pool.query(`SELECT user_id FROM professionals WHERE id = ?`, [professionalId]);
+  if (profUser && profUser.user_id) {
+    await notify({ user_id: profUser.user_id, title: 'Nova atribuição', message: `Você foi atribuído à solicitação ${old.request_number}.` });
+  }
 
-    return !!result.affectedRows;
+  return !!result.affectedRows;
 }
 
 async function schedule(requestId, scheduled_date, user) {
@@ -422,29 +458,29 @@ async function updateStatus(requestId, status, reason, user) {
 }
 
 async function submitReturn(requestId, data, user) {
-    const { status, notes } = data;
-    if (!status || !notes) {
-        throw Object.assign(new Error('Status e notas são obrigatórios.'), { status: 400 });
-    }
+  const { status, notes } = data;
+  if (!status || !notes) {
+    throw Object.assign(new Error('Status e notas são obrigatórios.'), { status: 400 });
+  }
 
-    const old = await get(requestId);
-    if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+  const old = await get(requestId);
+  if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
 
-    const [result] = await pool.query(
-        `UPDATE requests SET status = ?, notes = ?, completed_date = NOW() WHERE id = ?`,
-        [status, notes, requestId]
-    );
+  const [result] = await pool.query(
+    `UPDATE requests SET status = ?, notes = ?, completed_date = NOW() WHERE id = ?`,
+    [status, notes, requestId]
+  );
 
-    await logAction({
-        userId: user?.id,
-        action: 'SUBMIT_RETURN',
-        tableName: 'requests',
-        recordId: requestId,
-        oldValues: { status: old.status, notes: old.notes },
-        newValues: { status, notes },
-    });
+  await logAction({
+    userId: user?.id,
+    action: 'SUBMIT_RETURN',
+    tableName: 'requests',
+    recordId: requestId,
+    oldValues: { status: old.status, notes: old.notes },
+    newValues: { status, notes },
+  });
 
-    return !!result.affectedRows;
+  return !!result.affectedRows;
 }
 
 async function getDocumentsByRequestId(requestId) {
