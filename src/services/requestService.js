@@ -447,28 +447,96 @@ async function schedule(requestId, scheduled_date, user) {
   return true;
 }
 
+// async function updateStatus(requestId, status, reason, user) {
+//   const allowed = ['pending', 'assigned', 'scheduled', 'in_progress', 'completed', 'cancelled', 'rejected'];
+//   if (!allowed.includes(status)) throw Object.assign(new Error('Status inválido'), { status: 400 });
+//   const old = await get(requestId);
+//   if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+//   await pool.query(`UPDATE requests SET status=?, rejection_reason=?, completed_date = IF(?='completed', NOW(), completed_date) WHERE id=?`, [status, reason || null, status, requestId]);
+//   await logAction({ userId: user?.id, action: 'STATUS', tableName: 'requests', recordId: requestId, oldValues: old, newValues: { status, reason } });
+//   return true;
+// }
 async function updateStatus(requestId, status, reason, user) {
-  const allowed = ['pending', 'assigned', 'scheduled', 'in_progress', 'completed', 'cancelled', 'rejected'];
-  if (!allowed.includes(status)) throw Object.assign(new Error('Status inválido'), { status: 400 });
-  const old = await get(requestId);
-  if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
-  await pool.query(`UPDATE requests SET status=?, rejection_reason=?, completed_date = IF(?='completed', NOW(), completed_date) WHERE id=?`, [status, reason || null, status, requestId]);
-  await logAction({ userId: user?.id, action: 'STATUS', tableName: 'requests', recordId: requestId, oldValues: old, newValues: { status, reason } });
-  return true;
-}
-
-async function submitReturn(requestId, data, user) {
-  const { status, notes } = data;
-  if (!status || !notes) {
-    throw Object.assign(new Error('Status e notas são obrigatórios.'), { status: 400 });
+  // Adicionamos o novo status à lista de status permitidos
+  const allowed = ['pending', 'assigned', 'scheduled', 'in_progress', 'review_pending', 'completed', 'cancelled', 'rejected'];
+  if (!allowed.includes(status)) {
+    throw Object.assign(new Error('Status inválido'), { status: 400 });
   }
 
   const old = await get(requestId);
-  if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+  if (!old) {
+    throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+  }
 
+  // Lógica de permissão: Apenas o instituto pode mover de 'review_pending' para 'completed'
+  if (old.status === 'review_pending' && status === 'completed' && user.role !== 'institute') {
+    throw Object.assign(new Error('Apenas o instituto pode completar uma solicitação em revisão.'), { status: 403 });
+  }
+
+  await pool.query(
+    `UPDATE requests SET status=?, rejection_reason=?, completed_date = IF(?='completed', NOW(), completed_date) WHERE id=?`,
+    [status, reason || null, status, requestId]
+  );
+
+  await logAction({ userId: user?.id, action: 'STATUS_UPDATE', tableName: 'requests', recordId: requestId, oldValues: { status: old.status }, newValues: { status, reason } });
+
+  // Notificar o município quando o instituto completar a revisão
+  if (old.status === 'review_pending' && status === 'completed') {
+    const [munUsers] = await pool.query(`SELECT id FROM users WHERE role='municipality' AND municipality_id=? AND status='active'`, [old.municipality_id]);
+    for (const u of munUsers) {
+      await notify({ user_id: u.id, title: 'Solicitação Concluída', message: `A solicitação ${old.request_number} foi concluída pelo instituto.` });
+    }
+  }
+
+  return true;
+}
+// async function submitReturn(requestId, data, user) {
+//   const { status, notes } = data;
+//   if (!status || !notes) {
+//     throw Object.assign(new Error('Status e notas são obrigatórios.'), { status: 400 });
+//   }
+
+//   const old = await get(requestId);
+//   if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+
+//   const [result] = await pool.query(
+//     `UPDATE requests SET status = ?, notes = ?, completed_date = NOW() WHERE id = ?`,
+//     [status, notes, requestId]
+//   );
+
+//   await logAction({
+//     userId: user?.id,
+//     action: 'SUBMIT_RETURN',
+//     tableName: 'requests',
+//     recordId: requestId,
+//     oldValues: { status: old.status, notes: old.notes },
+//     newValues: { status, notes },
+//   });
+
+//   return !!result.affectedRows;
+// }
+async function submitReturn(requestId, data, user) {
+  const { notes } = data; // O status não é mais enviado pelo frontend nesta função
+  if (!notes) {
+    throw Object.assign(new Error('As notas do atendimento são obrigatórias.'), { status: 400 });
+  }
+
+  const old = await get(requestId);
+  if (!old) {
+    throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+  }
+
+  // Apenas o profissional pode submeter um retorno para revisão
+  if (user.role !== 'professional') {
+    throw Object.assign(new Error('Apenas profissionais podem submeter o retorno do atendimento.'), { status: 403 });
+  }
+
+  const newStatus = 'review_pending';
+
+  // Atualiza o status para 'review_pending' e salva as notas
   const [result] = await pool.query(
-    `UPDATE requests SET status = ?, notes = ?, completed_date = NOW() WHERE id = ?`,
-    [status, notes, requestId]
+    `UPDATE requests SET status = ?, notes = ? WHERE id = ?`,
+    [newStatus, notes, requestId]
   );
 
   await logAction({
@@ -477,15 +545,35 @@ async function submitReturn(requestId, data, user) {
     tableName: 'requests',
     recordId: requestId,
     oldValues: { status: old.status, notes: old.notes },
-    newValues: { status, notes },
+    newValues: { status: newStatus, notes },
   });
+
+  // Notificar o instituto que a solicitação precisa de revisão
+  if (old.institute_id) {
+    const [instUsers] = await pool.query(`SELECT id FROM users WHERE role='institute' AND institute_id=? AND status='active'`, [old.institute_id]);
+    for (const u of instUsers) {
+      await notify({ user_id: u.id, title: 'Revisão Pendente', message: `O atendimento da solicitação ${old.request_number} foi finalizado e aguarda sua revisão.` });
+    }
+  }
+
 
   return !!result.affectedRows;
 }
+
 
 async function getDocumentsByRequestId(requestId) {
   const [rows] = await pool.query(`SELECT * FROM documents WHERE request_id = ?`, [requestId]);
   return rows;
 }
 
-module.exports = { createRequest, list, get, assignProfessional, schedule, updateStatus, getDocumentsByRequestId, submitReturn };
+// module.exports = { createRequest, list, get, assignProfessional, schedule, updateStatus, getDocumentsByRequestId, submitReturn };
+module.exports = {
+  createRequest,
+  list,
+  get,
+  assignProfessional,
+  schedule,
+  updateStatus,
+  getDocumentsByRequestId,
+  submitReturn
+};
