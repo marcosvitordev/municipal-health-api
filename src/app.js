@@ -98,7 +98,28 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
 
 // Rota de health check
 // app.get('/health', (_req, res) => res.json({ ok: true }));
-app.get('/api/health', (_req,res)=>res.json({ok:true}));
+// app.get('/api/health', (_req,res)=>res.json({ok:true}));
+
+app.get('/api/health', async (_req, res) => {
+  const os = require('os');
+  const process = require('process');
+
+  // Calcular uptime, carga e métricas simuladas
+  const uptimeHours = (process.uptime() / 3600).toFixed(2);
+  const responseTime = Math.floor(Math.random() * 100) + 100; // ms (simulado)
+  const activeConnections = Math.floor(Math.random() * 1500) + 500; // simulado
+  const loadAvg = os.loadavg()[0];
+  const loadPercent = Math.min(100, (loadAvg / os.cpus().length) * 100).toFixed(0);
+
+  res.json({
+    status: "ok",
+    uptime: `${uptimeHours}h`,
+    responseTime: `${responseTime}ms`,
+    activeConnections,
+    loadPercent: `${loadPercent}%`
+  });
+});
+
 
 
 // Rotas da API
