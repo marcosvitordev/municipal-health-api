@@ -458,7 +458,7 @@ async function schedule(requestId, scheduled_date, user) {
 // }
 async function updateStatus(requestId, status, reason, user) {
   // Adicionamos o novo status à lista de status permitidos
-  const allowed = ['pending', 'assigned', 'scheduled', 'in_progress', 'review_pending', 'completed', 'cancelled', 'rejected'];
+  const allowed = ['pending','approved', 'assigned', 'scheduled', 'in_progress', 'review_pending', 'completed', 'cancelled', 'rejected'];
   if (!allowed.includes(status)) {
     throw Object.assign(new Error('Status inválido'), { status: 400 });
   }
