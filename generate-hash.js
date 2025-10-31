@@ -1,3 +1,5 @@
 // generate-hash.js
-const bcrypt = require('bcrypt');
-(async () => { console.log(await bcrypt.hash('123456', 10)); })();
+const bcrypt = require("bcrypt");
+(async () => {
+  console.log(await bcrypt.hash("123456", 10));
+})();

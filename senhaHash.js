@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+const bcrypt = require("bcrypt");
 
 async function gerarHash() {
   const senha = "1234"; // senha em texto puro

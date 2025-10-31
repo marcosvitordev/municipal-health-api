@@ -8,11 +8,33 @@
 
 // module.exports = { list, create, get, update, remove };
 
-const inst = require('../services/instituteService');
+const inst = require("../services/instituteService");
 
-async function list(req, res, n) { try { res.json(await inst.list({ limit: req.query.limit, offset: req.query.offset })); } catch (e) { n(e) } }
-async function create(req, res, n) { try { res.status(201).json(await inst.create(req.body, req.user)); } catch (e) { n(e) } }
-async function get(req, res, n) { try { const r = await inst.get(req.params.id); if (!r) return res.status(404).json({ error: 'Não encontrado' }); res.json(r); } catch (e) { n(e) } }
+async function list(req, res, n) {
+  try {
+    res.json(
+      await inst.list({ limit: req.query.limit, offset: req.query.offset })
+    );
+  } catch (e) {
+    n(e);
+  }
+}
+async function create(req, res, n) {
+  try {
+    res.status(201).json(await inst.create(req.body, req.user));
+  } catch (e) {
+    n(e);
+  }
+}
+async function get(req, res, n) {
+  try {
+    const r = await inst.get(req.params.id);
+    if (!r) return res.status(404).json({ error: "Não encontrado" });
+    res.json(r);
+  } catch (e) {
+    n(e);
+  }
+}
 
 // ========= GARANTA QUE ESTAS FUNÇÕES ESTEJAM ASSIM =========
 async function update(req, res, n) {

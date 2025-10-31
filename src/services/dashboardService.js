@@ -1,5 +1,5 @@
 // src/services/dashboardService.js
-const pool = require('../database/db');
+const pool = require("../database/db");
 
 /**
  * Agrega dados para o dashboard de um município específico.

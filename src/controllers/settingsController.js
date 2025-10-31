@@ -1,5 +1,5 @@
 // src/controllers/settingsController.js
-const settingsService = require('../services/settingsService');
+const settingsService = require("../services/settingsService");
 
 async function getSettings(req, res, next) {
   try {

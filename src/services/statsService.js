@@ -1,9 +1,11 @@
 // src/services/statsService.js
-const pool = require('../database/db');
+const pool = require("../database/db");
 
 // Esta função utiliza a VIEW que já existe no seu banco de dados
 async function getMunicipalityStats() {
-  const [rows] = await pool.query(`SELECT * FROM view_municipality_stats ORDER BY total_requests DESC`);
+  const [rows] = await pool.query(
+    `SELECT * FROM view_municipality_stats ORDER BY total_requests DESC`
+  );
   return rows;
 }
 
@@ -14,7 +16,6 @@ async function getAuditLogs({ limit = 50, offset = 0 }) {
      FROM audit_logs
      ORDER BY created_at DESC
      LIMIT ? OFFSET ?`,
-    
 
     [Number(limit), Number(offset)]
   );

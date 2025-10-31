@@ -111,8 +111,6 @@
 
 // module.exports = { createRequest, list, get, assignProfessional, schedule, updateStatus };
 
-
-
 // src/services/requestService.js
 // const pool = require('../database/db');
 // const { genRequestNumber } = require('../utils/id');
@@ -138,7 +136,6 @@
 //   return { id: res.insertId, request_number };
 // }
 
-
 // async function list(filter, user) {
 //   const where = [], params = [];
 //   if (user.role === 'municipality' && user.municipality_id) { where.push('r.municipality_id=?'); params.push(user.municipality_id); }
@@ -149,7 +146,7 @@
 
 //   // Query modificada para buscar nomes em vez de apenas IDs
 //   const sql = `
-//     SELECT 
+//     SELECT
 //       r.*,
 //       p.name as patientName,
 //       p.document as patientDocument,
@@ -160,7 +157,7 @@
 //     LEFT JOIN patients p ON r.patient_id = p.id
 //     LEFT JOIN professionals prof ON r.professional_id = prof.id
 //     LEFT JOIN institutes i ON r.institute_id = i.id
-//     ${where.length ? 'WHERE ' + where.join(' AND ') : ''} 
+//     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
 //     ORDER BY r.created_at DESC LIMIT 200
 //   `;
 
@@ -168,13 +165,12 @@
 //   return rows;
 // }
 
-
 // // ========= INÍCIO DA MODIFICAÇÃO =========
 // // Função 'get' aprimorada para retornar todos os detalhes de uma vez
 // async function get(id) {
 //   // 1. Busca a solicitação com JOINs para obter nomes
 //   const [[request]] = await pool.query(
-//     `SELECT 
+//     `SELECT
 //       r.*,
 //       p.name as patientName,
 //       p.document as patientDocument,
@@ -281,26 +277,61 @@
 
 // module.exports = { createRequest, list, get, assignProfessional, schedule, updateStatus, getDocumentsByRequestId, submitReturn };
 
-
 // src/services/requestService.js
-const pool = require('../database/db');
-const { genRequestNumber } = require('../utils/id');
-const { logAction } = require('./auditService');
-const { notify } = require('./notificationService');
+const pool = require("../database/db");
+const { genRequestNumber } = require("../utils/id");
+const { logAction } = require("./auditService");
+const { notify } = require("./notificationService");
 
 async function createRequest(data, user) {
-  const { municipality_id, institute_id = null, patient_id, professional_id = null, service_type, specialty, priority = 'medium', description, clinical_data = null, requested_date } = data;
+  const {
+    municipality_id,
+    institute_id = null,
+    patient_id,
+    professional_id = null,
+    service_type,
+    specialty,
+    priority = "medium",
+    description,
+    clinical_data = null,
+    requested_date,
+  } = data;
   const request_number = genRequestNumber();
   const [res] = await pool.query(
     `INSERT INTO requests (municipality_id, institute_id, patient_id, professional_id, request_number, service_type, specialty, priority, description, clinical_data, requested_date, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-    [municipality_id, institute_id, patient_id, professional_id, request_number, service_type, specialty, priority, description, clinical_data, requested_date]
+    [
+      municipality_id,
+      institute_id,
+      patient_id,
+      professional_id,
+      request_number,
+      service_type,
+      specialty,
+      priority,
+      description,
+      clinical_data,
+      requested_date,
+    ]
   );
-  await logAction({ userId: user?.id, action: 'CREATE', tableName: 'requests', recordId: res.insertId, newValues: { ...data, request_number } });
+  await logAction({
+    userId: user?.id,
+    action: "CREATE",
+    tableName: "requests",
+    recordId: res.insertId,
+    newValues: { ...data, request_number },
+  });
   if (institute_id) {
-    const [instUsers] = await pool.query(`SELECT id FROM users WHERE role='institute' AND institute_id=? AND status='active'`, [institute_id]);
+    const [instUsers] = await pool.query(
+      `SELECT id FROM users WHERE role='institute' AND institute_id=? AND status='active'`,
+      [institute_id]
+    );
     for (const u of instUsers) {
-      await notify({ user_id: u.id, title: 'Nova solicitação', message: `Solicitação ${request_number} recebida.` });
+      await notify({
+        user_id: u.id,
+        title: "Nova solicitação",
+        message: `Solicitação ${request_number} recebida.`,
+      });
     }
   }
   return { id: res.insertId, request_number };
@@ -315,7 +346,7 @@ async function createRequest(data, user) {
 //   if (filter.request_number) { where.push('r.request_number=?'); params.push(filter.request_number); }
 
 //   const sql = `
-//     SELECT 
+//     SELECT
 //       r.*,
 //       p.name as patientName,
 //       p.document as patientDocument,
@@ -326,7 +357,7 @@ async function createRequest(data, user) {
 //     LEFT JOIN patients p ON r.patient_id = p.id
 //     LEFT JOIN professionals prof ON r.professional_id = prof.id
 //     LEFT JOIN institutes i ON r.institute_id = i.id
-//     ${where.length ? 'WHERE ' + where.join(' AND ') : ''} 
+//     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
 //     ORDER BY r.created_at DESC LIMIT 200
 //   `;
 
@@ -334,22 +365,37 @@ async function createRequest(data, user) {
 //   return rows;
 // }
 async function list(filter, user) {
-  const where = [], params = [];
-  if (user.role === 'municipality' && user.municipality_id) { where.push('r.municipality_id=?'); params.push(user.municipality_id); }
-  if (user.role === 'institute' && user.institute_id) { where.push('r.institute_id=?'); params.push(user.institute_id); }
+  const where = [],
+    params = [];
+  if (user.role === "municipality" && user.municipality_id) {
+    where.push("r.municipality_id=?");
+    params.push(user.municipality_id);
+  }
+  if (user.role === "institute" && user.institute_id) {
+    where.push("r.institute_id=?");
+    params.push(user.institute_id);
+  }
 
   // ==================== INÍCIO DA CORREÇÃO ====================
   // Modificamos a forma como o profissional é filtrado.
   // Em vez de usar user.id, buscamos o professional.id vinculado ao user.id.
-  if (user.role === 'professional') {
+  if (user.role === "professional") {
     // Esta subconsulta encontra o ID do profissional com base no ID do usuário logado.
-    where.push('r.professional_id = (SELECT id FROM professionals WHERE user_id = ?)');
+    where.push(
+      "r.professional_id = (SELECT id FROM professionals WHERE user_id = ?)"
+    );
     params.push(user.id);
   }
   // ===================== FIM DA CORREÇÃO ======================
 
-  if (filter.status) { where.push('r.status=?'); params.push(filter.status); }
-  if (filter.request_number) { where.push('r.request_number=?'); params.push(filter.request_number); }
+  if (filter.status) {
+    where.push("r.status=?");
+    params.push(filter.status);
+  }
+  if (filter.request_number) {
+    where.push("r.request_number=?");
+    params.push(filter.request_number);
+  }
 
   const sql = `
     SELECT 
@@ -363,7 +409,7 @@ async function list(filter, user) {
     LEFT JOIN patients p ON r.patient_id = p.id
     LEFT JOIN professionals prof ON r.professional_id = prof.id
     LEFT JOIN institutes i ON r.institute_id = i.id
-    ${where.length ? 'WHERE ' + where.join(' AND ') : ''} 
+    ${where.length ? "WHERE " + where.join(" AND ") : ""} 
     ORDER BY r.created_at DESC LIMIT 200
   `;
 
@@ -405,11 +451,17 @@ async function get(id) {
 
 async function assignProfessional(requestId, professionalId, user) {
   const old = await get(requestId);
-  if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+  if (!old)
+    throw Object.assign(new Error("Solicitação não encontrada"), {
+      status: 404,
+    });
 
   // Permite que admin ou o instituto correto façam a atribuição
-  if (user.role === 'institute' && old.institute_id !== user.institute_id) {
-    throw Object.assign(new Error('Sem permissão para atribuir a esta solicitação'), { status: 403 });
+  if (user.role === "institute" && old.institute_id !== user.institute_id) {
+    throw Object.assign(
+      new Error("Sem permissão para atribuir a esta solicitação"),
+      { status: 403 }
+    );
   }
 
   const [result] = await pool.query(
@@ -419,17 +471,24 @@ async function assignProfessional(requestId, professionalId, user) {
 
   await logAction({
     userId: user?.id,
-    action: 'ASSIGN_PROFESSIONAL',
-    tableName: 'requests',
+    action: "ASSIGN_PROFESSIONAL",
+    tableName: "requests",
     recordId: requestId,
     oldValues: { professional_id: old.professional_id, status: old.status },
-    newValues: { professional_id: professionalId, status: 'assigned' },
+    newValues: { professional_id: professionalId, status: "assigned" },
   });
 
   // Opcional: Notificar o profissional
-  const [[profUser]] = await pool.query(`SELECT user_id FROM professionals WHERE id = ?`, [professionalId]);
+  const [[profUser]] = await pool.query(
+    `SELECT user_id FROM professionals WHERE id = ?`,
+    [professionalId]
+  );
   if (profUser && profUser.user_id) {
-    await notify({ user_id: profUser.user_id, title: 'Nova atribuição', message: `Você foi atribuído à solicitação ${old.request_number}.` });
+    await notify({
+      user_id: profUser.user_id,
+      title: "Nova atribuição",
+      message: `Você foi atribuído à solicitação ${old.request_number}.`,
+    });
   }
 
   return !!result.affectedRows;
@@ -447,32 +506,61 @@ async function assignProfessional(requestId, professionalId, user) {
 //   return true;
 // }
 
-async function schedule(requestId, scheduled_date_iso_string, user) { // Renomeie o parâmetro para clareza
+async function schedule(requestId, scheduled_date_iso_string, user) {
+  // Renomeie o parâmetro para clareza
   const old = await get(requestId);
-  if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+  if (!old)
+    throw Object.assign(new Error("Solicitação não encontrada"), {
+      status: 404,
+    });
 
   // --- INÍCIO DA CORREÇÃO ---
   // Converte a string ISO para o formato DATETIME do MySQL ('YYYY-MM-DD HH:MM:SS')
   let scheduled_date_mysql;
   try {
     scheduled_date_mysql = new Date(scheduled_date_iso_string)
-                              .toISOString() // Garante que está em UTC
-                              .slice(0, 19)    // Pega 'YYYY-MM-DDTHH:MM:SS'
-                              .replace('T', ' '); // Substitui 'T' por espaço
+      .toISOString() // Garante que está em UTC
+      .slice(0, 19) // Pega 'YYYY-MM-DDTHH:MM:SS'
+      .replace("T", " "); // Substitui 'T' por espaço
   } catch (e) {
-      console.error("Erro ao formatar data recebida:", scheduled_date_iso_string, e);
-      throw Object.assign(new Error('Formato de data inválido recebido.'), { status: 400 });
+    console.error(
+      "Erro ao formatar data recebida:",
+      scheduled_date_iso_string,
+      e
+    );
+    throw Object.assign(new Error("Formato de data inválido recebido."), {
+      status: 400,
+    });
   }
   // --- FIM DA CORREÇÃO ---
 
   // Usa a data formatada na query
-  await pool.query(`UPDATE requests SET scheduled_date=?, status='scheduled' WHERE id=?`, [scheduled_date_mysql, requestId]); // Usa a data formatada
-  await logAction({ userId: user?.id, action: 'SCHEDULE', tableName: 'requests', recordId: requestId, oldValues: old, newValues: { scheduled_date: scheduled_date_mysql, status: 'scheduled' } }); // Loga a data formatada
+  await pool.query(
+    `UPDATE requests SET scheduled_date=?, status='scheduled' WHERE id=?`,
+    [scheduled_date_mysql, requestId]
+  ); // Usa a data formatada
+  await logAction({
+    userId: user?.id,
+    action: "SCHEDULE",
+    tableName: "requests",
+    recordId: requestId,
+    oldValues: old,
+    newValues: { scheduled_date: scheduled_date_mysql, status: "scheduled" },
+  }); // Loga a data formatada
 
   // Notificar município (pode usar a data original ou formatar para exibição)
-  const [munUsers] = await pool.query(`SELECT id FROM users WHERE role='municipality' AND municipality_id=? AND status='active'`, [old.municipality_id]);
+  const [munUsers] = await pool.query(
+    `SELECT id FROM users WHERE role='municipality' AND municipality_id=? AND status='active'`,
+    [old.municipality_id]
+  );
   for (const u of munUsers) {
-    await notify({ user_id: u.id, title: 'Atendimento agendado', message: `Solicitação ${old.request_number} agendada para ${new Date(scheduled_date_iso_string).toLocaleString('pt-BR')}.` });
+    await notify({
+      user_id: u.id,
+      title: "Atendimento agendado",
+      message: `Solicitação ${old.request_number} agendada para ${new Date(
+        scheduled_date_iso_string
+      ).toLocaleString("pt-BR")}.`,
+    });
   }
   return true;
 }
@@ -488,19 +576,40 @@ async function schedule(requestId, scheduled_date_iso_string, user) { // Renomei
 // }
 async function updateStatus(requestId, status, reason, user) {
   // Adicionamos o novo status à lista de status permitidos
-  const allowed = ['pending','approved', 'assigned', 'scheduled', 'in_progress', 'review_pending', 'completed', 'cancelled', 'rejected'];
+  const allowed = [
+    "pending",
+    "approved",
+    "assigned",
+    "scheduled",
+    "in_progress",
+    "review_pending",
+    "completed",
+    "cancelled",
+    "rejected",
+  ];
   if (!allowed.includes(status)) {
-    throw Object.assign(new Error('Status inválido'), { status: 400 });
+    throw Object.assign(new Error("Status inválido"), { status: 400 });
   }
 
   const old = await get(requestId);
   if (!old) {
-    throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+    throw Object.assign(new Error("Solicitação não encontrada"), {
+      status: 404,
+    });
   }
 
   // Lógica de permissão: Apenas o instituto pode mover de 'review_pending' para 'completed'
-  if (old.status === 'review_pending' && status === 'completed' && user.role !== 'institute') {
-    throw Object.assign(new Error('Apenas o instituto pode completar uma solicitação em revisão.'), { status: 403 });
+  if (
+    old.status === "review_pending" &&
+    status === "completed" &&
+    user.role !== "institute"
+  ) {
+    throw Object.assign(
+      new Error(
+        "Apenas o instituto pode completar uma solicitação em revisão."
+      ),
+      { status: 403 }
+    );
   }
 
   await pool.query(
@@ -508,13 +617,27 @@ async function updateStatus(requestId, status, reason, user) {
     [status, reason || null, status, requestId]
   );
 
-  await logAction({ userId: user?.id, action: 'STATUS_UPDATE', tableName: 'requests', recordId: requestId, oldValues: { status: old.status }, newValues: { status, reason } });
+  await logAction({
+    userId: user?.id,
+    action: "STATUS_UPDATE",
+    tableName: "requests",
+    recordId: requestId,
+    oldValues: { status: old.status },
+    newValues: { status, reason },
+  });
 
   // Notificar o município quando o instituto completar a revisão
-  if (old.status === 'review_pending' && status === 'completed') {
-    const [munUsers] = await pool.query(`SELECT id FROM users WHERE role='municipality' AND municipality_id=? AND status='active'`, [old.municipality_id]);
+  if (old.status === "review_pending" && status === "completed") {
+    const [munUsers] = await pool.query(
+      `SELECT id FROM users WHERE role='municipality' AND municipality_id=? AND status='active'`,
+      [old.municipality_id]
+    );
     for (const u of munUsers) {
-      await notify({ user_id: u.id, title: 'Solicitação Concluída', message: `A solicitação ${old.request_number} foi concluída pelo instituto.` });
+      await notify({
+        user_id: u.id,
+        title: "Solicitação Concluída",
+        message: `A solicitação ${old.request_number} foi concluída pelo instituto.`,
+      });
     }
   }
 
@@ -548,20 +671,30 @@ async function updateStatus(requestId, status, reason, user) {
 async function submitReturn(requestId, data, user) {
   const { notes } = data; // O status não é mais enviado pelo frontend nesta função
   if (!notes) {
-    throw Object.assign(new Error('As notas do atendimento são obrigatórias.'), { status: 400 });
+    throw Object.assign(
+      new Error("As notas do atendimento são obrigatórias."),
+      { status: 400 }
+    );
   }
 
   const old = await get(requestId);
   if (!old) {
-    throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+    throw Object.assign(new Error("Solicitação não encontrada"), {
+      status: 404,
+    });
   }
 
   // Apenas o profissional pode submeter um retorno para revisão
-  if (user.role !== 'professional') {
-    throw Object.assign(new Error('Apenas profissionais podem submeter o retorno do atendimento.'), { status: 403 });
+  if (user.role !== "professional") {
+    throw Object.assign(
+      new Error(
+        "Apenas profissionais podem submeter o retorno do atendimento."
+      ),
+      { status: 403 }
+    );
   }
 
-  const newStatus = 'review_pending';
+  const newStatus = "review_pending";
 
   // Atualiza o status para 'review_pending' e salva as notas
   const [result] = await pool.query(
@@ -571,8 +704,8 @@ async function submitReturn(requestId, data, user) {
 
   await logAction({
     userId: user?.id,
-    action: 'SUBMIT_RETURN',
-    tableName: 'requests',
+    action: "SUBMIT_RETURN",
+    tableName: "requests",
     recordId: requestId,
     oldValues: { status: old.status, notes: old.notes },
     newValues: { status: newStatus, notes },
@@ -580,19 +713,27 @@ async function submitReturn(requestId, data, user) {
 
   // Notificar o instituto que a solicitação precisa de revisão
   if (old.institute_id) {
-    const [instUsers] = await pool.query(`SELECT id FROM users WHERE role='institute' AND institute_id=? AND status='active'`, [old.institute_id]);
+    const [instUsers] = await pool.query(
+      `SELECT id FROM users WHERE role='institute' AND institute_id=? AND status='active'`,
+      [old.institute_id]
+    );
     for (const u of instUsers) {
-      await notify({ user_id: u.id, title: 'Revisão Pendente', message: `O atendimento da solicitação ${old.request_number} foi finalizado e aguarda sua revisão.` });
+      await notify({
+        user_id: u.id,
+        title: "Revisão Pendente",
+        message: `O atendimento da solicitação ${old.request_number} foi finalizado e aguarda sua revisão.`,
+      });
     }
   }
-
 
   return !!result.affectedRows;
 }
 
-
 async function getDocumentsByRequestId(requestId) {
-  const [rows] = await pool.query(`SELECT * FROM documents WHERE request_id = ?`, [requestId]);
+  const [rows] = await pool.query(
+    `SELECT * FROM documents WHERE request_id = ?`,
+    [requestId]
+  );
   return rows;
 }
 
@@ -605,5 +746,5 @@ module.exports = {
   schedule,
   updateStatus,
   getDocumentsByRequestId,
-  submitReturn
+  submitReturn,
 };

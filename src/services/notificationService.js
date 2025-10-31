@@ -1,6 +1,6 @@
-const pool = require('../database/db');
+const pool = require("../database/db");
 
-async function notify({ user_id, title, message, type='info' }) {
+async function notify({ user_id, title, message, type = "info" }) {
   await pool.query(
     `INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)`,
     [user_id, title, message, type]
