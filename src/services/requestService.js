@@ -435,14 +435,44 @@ async function assignProfessional(requestId, professionalId, user) {
   return !!result.affectedRows;
 }
 
-async function schedule(requestId, scheduled_date, user) {
+// async function schedule(requestId, scheduled_date, user) {
+//   const old = await get(requestId);
+//   if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
+//   await pool.query(`UPDATE requests SET scheduled_date=?, status='scheduled' WHERE id=?`, [scheduled_date, requestId]);
+//   await logAction({ userId: user?.id, action: 'SCHEDULE', tableName: 'requests', recordId: requestId, oldValues: old, newValues: { scheduled_date, status: 'scheduled' } });
+//   const [munUsers] = await pool.query(`SELECT id FROM users WHERE role='municipality' AND municipality_id=? AND status='active'`, [old.municipality_id]);
+//   for (const u of munUsers) {
+//     await notify({ user_id: u.id, title: 'Atendimento agendado', message: `Solicitação ${old.request_number} agendada para ${new Date(scheduled_date).toLocaleDateString('pt-BR')}.` });
+//   }
+//   return true;
+// }
+
+async function schedule(requestId, scheduled_date_iso_string, user) { // Renomeie o parâmetro para clareza
   const old = await get(requestId);
   if (!old) throw Object.assign(new Error('Solicitação não encontrada'), { status: 404 });
-  await pool.query(`UPDATE requests SET scheduled_date=?, status='scheduled' WHERE id=?`, [scheduled_date, requestId]);
-  await logAction({ userId: user?.id, action: 'SCHEDULE', tableName: 'requests', recordId: requestId, oldValues: old, newValues: { scheduled_date, status: 'scheduled' } });
+
+  // --- INÍCIO DA CORREÇÃO ---
+  // Converte a string ISO para o formato DATETIME do MySQL ('YYYY-MM-DD HH:MM:SS')
+  let scheduled_date_mysql;
+  try {
+    scheduled_date_mysql = new Date(scheduled_date_iso_string)
+                              .toISOString() // Garante que está em UTC
+                              .slice(0, 19)    // Pega 'YYYY-MM-DDTHH:MM:SS'
+                              .replace('T', ' '); // Substitui 'T' por espaço
+  } catch (e) {
+      console.error("Erro ao formatar data recebida:", scheduled_date_iso_string, e);
+      throw Object.assign(new Error('Formato de data inválido recebido.'), { status: 400 });
+  }
+  // --- FIM DA CORREÇÃO ---
+
+  // Usa a data formatada na query
+  await pool.query(`UPDATE requests SET scheduled_date=?, status='scheduled' WHERE id=?`, [scheduled_date_mysql, requestId]); // Usa a data formatada
+  await logAction({ userId: user?.id, action: 'SCHEDULE', tableName: 'requests', recordId: requestId, oldValues: old, newValues: { scheduled_date: scheduled_date_mysql, status: 'scheduled' } }); // Loga a data formatada
+
+  // Notificar município (pode usar a data original ou formatar para exibição)
   const [munUsers] = await pool.query(`SELECT id FROM users WHERE role='municipality' AND municipality_id=? AND status='active'`, [old.municipality_id]);
   for (const u of munUsers) {
-    await notify({ user_id: u.id, title: 'Atendimento agendado', message: `Solicitação ${old.request_number} agendada para ${new Date(scheduled_date).toLocaleDateString('pt-BR')}.` });
+    await notify({ user_id: u.id, title: 'Atendimento agendado', message: `Solicitação ${old.request_number} agendada para ${new Date(scheduled_date_iso_string).toLocaleString('pt-BR')}.` });
   }
   return true;
 }
